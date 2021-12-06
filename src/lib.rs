@@ -260,7 +260,8 @@ fn retrieve(key: Key) -> RcBytes {
     })
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn store(arg: StoreArg) {
     STATE.with(move |s| {
         let mut assets = s.assets.borrow_mut();
@@ -284,7 +285,8 @@ fn store(arg: StoreArg) {
     });
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn create_batch() -> CreateBatchResponse {
     STATE.with(|s| {
         let batch_id = s.next_batch_id.borrow().clone();
@@ -311,7 +313,8 @@ fn create_batch() -> CreateBatchResponse {
     })
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn create_chunk(arg: CreateChunkArg) -> CreateChunkResponse {
     STATE.with(|s| {
         let mut batches = s.batches.borrow_mut();
@@ -336,32 +339,38 @@ fn create_chunk(arg: CreateChunkArg) -> CreateChunkResponse {
     })
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn create_asset(arg: CreateAssetArguments) {
     do_create_asset(arg);
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn set_asset_content(arg: SetAssetContentArguments) {
     do_set_asset_content(arg);
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn unset_asset_content(arg: UnsetAssetContentArguments) {
     do_unset_asset_content(arg);
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn delete_content(arg: DeleteAssetArguments) {
     do_delete_asset(arg);
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn clear() {
     do_clear();
 }
 
-#[update(guard = "is_authorized")]
+// #[update(guard = "is_authorized")]
+#[update]
 fn commit_batch(arg: CommitBatchArguments) {
     let batch_id = arg.batch_id;
     for op in arg.operations {
@@ -494,6 +503,8 @@ fn create_strategy(
     })
 }
 
+// TODO try to hard-code a 206 response that does streaming
+// TODO then work with the other branch to try and figure out what went wrong
 fn build_200(
     asset: &Asset,
     enc_name: &str,
@@ -502,7 +513,17 @@ fn build_200(
     chunk_index: usize,
     certificate_header: Option<HeaderField>,
 ) -> HttpResponse {
-    let mut headers = vec![("Content-Type".to_string(), asset.content_type.to_string())];
+    let mut headers = vec![
+        ("Accept-Ranges".to_string(), "bytes".to_string()),
+        ("Content-Length".to_string(), enc.total_length.to_string()),
+        ("Content-Range".to_string(), format!(
+            "{start_byte}-{end_byte}/{total_bytes}",
+            start_byte = "0".to_string(),
+            end_byte = (enc.total_length - 1).to_string(),
+            total_bytes = enc.total_length.to_string()
+        )),
+        ("Content-Type".to_string(), asset.content_type.to_string())
+    ];
     if enc_name != "identity" {
         headers.push(("Content-Encoding".to_string(), enc_name.to_string()));
     }
@@ -513,7 +534,7 @@ fn build_200(
     let streaming_strategy = create_strategy(asset, enc_name, enc, key, chunk_index);
 
     HttpResponse {
-        status_code: 200,
+        status_code: 206,
         headers,
         body: enc.content_chunks[chunk_index].clone(),
         streaming_strategy,
